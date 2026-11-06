@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">Wordward</string>
+    <string name="switch_language">English</string>
+    <string name="rules">เดาคำอังกฤษ ยิ่งความหมายใกล้คำลับ เลขอันดับยิ่งน้อย เป้าหมายคือ #1</string>
+    <string name="input_hint">คำอังกฤษ</string>
+    <string name="guess">เดาคำ</string>
+    <string name="hint">ขอคำใบ้</string>
+    <string name="list_title">คำที่ใกล้ที่สุดก่อน</string>
+    <string name="date">โจทย์ประจำวัน · %1$s</string>
+    <string name="latest">ล่าสุด · %1$s #%2$d</string>
+    <string name="totals">รวม %1$d ครั้ง · เดาเอง %2$d · คำใบ้ %3$d</string>
+    <string name="won">ทายถูกแล้ว! คำลับคือ %1$s</string>
+    <string name="unknown">ยังไม่มีคำนี้ในคลังตัวอย่าง</string>
+    <string name="repeat">เคยพบแล้ว · %1$s #%2$d</string>
+    <string name="no_hint">ใกล้แล้ว ลองเดาคำลับด้วยตัวเอง</string>
+    <string name="hint_row">%1$s · คำใบ้</string>
+</resources>

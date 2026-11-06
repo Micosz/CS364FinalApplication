@@ -1,0 +1,25 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'th.ac.tu.cs364.wordward'
+    compileSdk { version = release(37) }
+
+    defaultConfig {
+        applicationId 'th.ac.tu.cs364.wordward.starter'
+        minSdk 24
+        targetSdk 37
+        versionCode 1
+        versionName '1.0'
+    }
+    bundle { language { enableSplit = false } }
+    compileOptions {
+        coreLibraryDesugaringEnabled true
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}
+
+dependencies {
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
+    testImplementation 'junit:junit:4.13.2'
+}

@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">Wordward</string>
+    <string name="switch_language">ภาษาไทย</string>
+    <string name="rules">Guess an English word. The closer its meaning, the smaller its rank. Find #1.</string>
+    <string name="input_hint">English word</string>
+    <string name="guess">Guess</string>
+    <string name="hint">Hint</string>
+    <string name="list_title">Closest first</string>
+    <string name="date">Daily word · %1$s</string>
+    <string name="latest">Latest · %1$s #%2$d</string>
+    <string name="totals">%1$d attempts · %2$d guesses · %3$d hints</string>
+    <string name="won">Solved! The word is %1$s.</string>
+    <string name="unknown">This word is outside the starter dictionary.</string>
+    <string name="repeat">Already seen · %1$s #%2$d</string>
+    <string name="no_hint">You are close! Guess the final word.</string>
+    <string name="hint_row">%1$s · hint</string>
+</resources>

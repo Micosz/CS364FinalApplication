@@ -1,0 +1,29 @@
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/screen" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:fillViewport="true" android:background="#F7FAF8">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:padding="20dp">
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="@string/app_name" android:textColor="#104838" android:textSize="32sp"/>
+        <TextView android:id="@+id/day" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+        <Button android:id="@+id/language" android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="@string/switch_language"/>
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/rules"/>
+        <EditText android:id="@+id/input" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:inputType="textNoSuggestions" android:singleLine="true" android:imeOptions="actionGo" android:hint="@string/input_hint"/>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content">
+            <Button android:id="@+id/guess" android:layout_width="0dp" android:layout_weight="1"
+                android:layout_height="wrap_content" android:text="@string/guess"/>
+            <Button android:id="@+id/hint" android:layout_width="0dp" android:layout_weight="1"
+                android:layout_height="wrap_content" android:text="@string/hint"/>
+        </LinearLayout>
+        <TextView android:id="@+id/notice" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:accessibilityLiveRegion="polite" android:textColor="#104838" android:textSize="18sp"/>
+        <TextView android:id="@+id/latest" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+        <TextView android:id="@+id/totals" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="16dp" android:text="@string/list_title" android:textStyle="bold"/>
+        <TextView android:id="@+id/history" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:lineSpacingExtra="5dp"/>
+    </LinearLayout>
+</ScrollView>

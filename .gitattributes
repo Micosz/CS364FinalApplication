@@ -1,0 +1,9 @@
+* text=auto
+*.i8 binary
+*.jar binary
+*.png binary
+*.txt text eol=lf
+*.tsv text eol=lf
+gradlew text eol=lf
+gradlew.bat text eol=crlf
+app/src/main/assets/WordNet-LICENSE.txt whitespace=-blank-at-eol
