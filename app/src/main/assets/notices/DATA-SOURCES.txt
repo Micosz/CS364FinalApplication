@@ -1,0 +1,27 @@
+Wordward data release: wordward-en-5000-31-v1
+This notice applies to the bundled ranking and alias data.
+
+Candidate vocabulary was selected, filtered and reordered using English
+frequency data from wordfreq 3.1.1, by Robyn Speer.
+https://github.com/rspeer/wordfreq
+https://pypi.org/project/wordfreq/3.1.1/
+
+We distribute the adapted puzzle and alias tables under Creative Commons
+Attribution-ShareAlike 4.0 International, with the upstream attribution
+and applicable source notices retained. This statement covers the data
+tables and does not license the surrounding Wordward source code.
+https://creativecommons.org/licenses/by-sa/4.0/
+
+See wordfreq-NOTICE.md for corpus credits including Marc Brysbaert et al.
+(SUBTLEX, freely available data), OpenSubtitles, and other sources.
+wordfreq-LICENSE.txt covers the upstream library's Apache 2.0 code.
+
+English lemmas and noun inflections were checked against Princeton WordNet
+3.0. See WordNet-3.0-LICENSE.txt for the attribution and license.
+https://wordnet.princeton.edu/license-and-commercial-use
+
+Word similarity scores were computed from Stanford GloVe 6B, 100d,
+trained on Wikipedia 2014 and Gigaword 5. The pretrained data is
+released under the Open Data Commons PDDL 1.0.
+https://github.com/stanfordnlp/GloVe/blob/master/README.md
+https://opendatacommons.org/licenses/pddl/1-0/

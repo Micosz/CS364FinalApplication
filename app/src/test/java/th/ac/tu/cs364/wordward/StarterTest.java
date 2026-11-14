@@ -1,6 +1,5 @@
 package th.ac.tu.cs364.wordward;
 
-import java.io.*;
 import java.time.*;
 import java.util.*;
 import org.junit.*;
@@ -12,9 +11,8 @@ public class StarterTest {
     private final LocalDate first = LocalDate.of(2026, 11, 7);
 
     @Before public void load() throws Exception {
-        File assets = new File("src/main/assets");
-        words = new WordRanker(new FileInputStream(new File(assets, "puzzles.tsv")),
-                new FileInputStream(new File(assets, "aliases.tsv")));
+        words = new WordRanker(getClass().getResourceAsStream("/starter/puzzles.tsv"),
+                getClass().getResourceAsStream("/starter/aliases.tsv"));
         ranks = words.rankFor("ocean");
     }
 
