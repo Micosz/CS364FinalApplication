@@ -35,7 +35,7 @@ Approval: Approved by user on 2026-11-15
 - [x] P1: ยืนยัน dependency และพฤติกรรมที่ยังไม่ตกลง บันทึกคำตอบและปรับแผนก่อนเริ่มพัฒนา.
 - [x] P2: เตรียมข้อมูลทดสอบตามวิธีที่ผู้ใช้เลือก ตรวจ baseline ของ branch และ commit แผนที่ยืนยันแล้ว. รวมข้อมูลแล้วที่ `093591d`; baseline 9 tests และ assembleDebug ผ่านหลังดาวน์โหลด dependency 2.1.5 ที่ขาด.
 - [x] P3: ปรับ `HintEngine` พร้อม `HintEngineTest` ให้ช่วงแรกสัมพันธ์กับ N, ช่วงถัดไปอิง best 80–90%, ใกล้ #2 ยังมีทางไปต่อ, รอบจบ/ไม่มีผู้สมัครคืน null, ผลไม่เปลี่ยนรอบ.
-- [ ] P4: เพิ่ม `DailyWordProviderTest` สำหรับ 31 วันจริงและขอบเที่ยงคืนไทยหลายเขตเวลาของเครื่อง พร้อมอธิบายสัญญา/นโยบายชั่วคราวใน Javadoc ของ DailyWordProvider โดยไม่เปลี่ยนผลลัพธ์ของฐาน.
+- [x] P4: เพิ่ม `DailyWordProviderTest` สำหรับ 31 วันจริงและขอบเที่ยงคืนไทยหลายเขตเวลาของเครื่อง พร้อมอธิบายสัญญา/นโยบายชั่วคราวใน Javadoc ของ DailyWordProvider โดยไม่เปลี่ยนผลลัพธ์ของฐาน.
 - [x] P5: ทดสอบคำใบ้ต่อเนื่องบนข้อมูลจริง 5,000 คำครบทั้ง 31 โจทย์และ fixture เล็ก รวมรอบใหม่ที่ประวัติว่างและใช้โจทย์เดิม.
 - [ ] P6: จัดทำ `doc/WORDWARD_04_DAILY.md` เป็นเนื้อหารายงานงาน 04, ผลทดสอบ, ข้อเสนอ dialog ข้ามวัน, จุดเชื่อมสำหรับงาน 01/02/03/05 และรายการหลักฐาน/การตัดสินใจที่ยังรอทีม.
 - [ ] P7: รัน unit tests และ assembleDebug ตามสภาพแวดล้อมที่มี ตรวจ diff/status และ commit แต่ละชุดที่ตรวจแล้ว.
@@ -69,6 +69,7 @@ Approval: Approved by user on 2026-11-15
 - วัน: Instant ก่อน/หลัง `17:00:00Z` สอดคล้องเที่ยงคืนไทย, เปลี่ยน JVM default timezone แล้วผลเหมือนเดิม, วันแรก/กลาง/31 และคำลับไม่ซ้ำ; boundary tests เพิ่มเฉพาะนโยบายที่ได้รับอนุมัติ.
 - Baseline จริง: คำสั่ง offline ครั้งแรกขาด `desugar_jdk_libs:2.1.5`; รันคำสั่งเดิมแบบ online สำเร็จ (15 วินาที), 9 tests (StarterTest 6 + ProductionWordsTest 3), failures/errors 0; assembleDebug ผ่าน. ผล XML อยู่ใน `app/build/test-results/testDebugUnitTest/`.
 - หลังปรับคำใบ้: `--offline :app:testDebugUnitTest` ผ่าน; HintEngineTest ครอบคลุมช่วงแรก, best เทียบคำล่าสุด, คำใบ้ต่อเนื่อง, ตัวกรอง/fallback, คลัง 0/1/2/3/1,000/5,000, รอบจบและรอบว่างใหม่ รวมการเดินคำใบ้ครบ 31 โจทย์จริง.
+- หลังเพิ่ม daily tests: `--offline :app:testDebugUnitTest :app:assembleDebug` ผ่าน (3 วินาที), รวม 28 tests: HintEngineTest 13, DailyWordProviderTest 6, ProductionWordsTest 3, StarterTest 6; failures/errors 0. ตรวจขอบเที่ยงคืนครบ 30 จุดภายในชุดและ default timezone 6 เขต.
 - `git diff --check`, ตรวจรายงาน tests และสถานะ branch หลังแต่ละชุดงาน; ไม่รวมการ push/เปิด PR เพราะสิทธิ์ GitHub ปัจจุบันถูกปฏิเสธ.
 
 ## Risks
