@@ -1,0 +1,4 @@
+# Remove abbreviations, generic false friends and unwanted terms.
+bbc cnn dnc gop html http https ibm irs isbn jpeg pdf php png sql uk usa usb url usd utc vpn www
+fuck fucking fucker fucked motherfucker shit shitty bullshit asshole assholes bastard bastards bitch bitches cunt cocksucker dickhead whore whores slut sluts fag faggot faggots nigger niggers nigga kike spic chink tranny retard retards wanker twat porno porn pornography cock pussy dildo semen sperm penis vagina blowjob masturbation orgasm erotic anal anus genital genitals prostitute prostitution rape rapist incest sodomy ejaculation sex sexual sexually
+google facebook yahoo microsoft iphone

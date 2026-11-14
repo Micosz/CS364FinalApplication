@@ -3,6 +3,8 @@ package th.ac.tu.cs364.wordward;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /** Each puzzle lists the same vocabulary in order, closest first. */
 final class WordRanker {
@@ -49,14 +51,16 @@ final class WordRanker {
     Ranking rankFor(String secret) { return puzzles.get(secret); }
 
     static final class Ranking {
+        private static final Pattern CANONICAL_WORD = Pattern.compile("[a-z]+");
         private final List<String> words;
         private final Map<String, Integer> positions = new HashMap<>();
 
         Ranking(List<String> ordered) throws IOException {
             words = new ArrayList<>(ordered);
+            Matcher matcher = CANONICAL_WORD.matcher("");
             for (int i = 0; i < words.size(); i++) {
                 String word = words.get(i);
-                if (!word.matches("[a-z]+") || positions.put(word, i + 1) != null) {
+                if (!matcher.reset(word).matches() || positions.put(word, i + 1) != null) {
                     throw new IOException("Invalid ranked word: " + word);
                 }
             }
