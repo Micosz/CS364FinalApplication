@@ -20,17 +20,22 @@ VECTOR_MEMBER = "glove.6B.100d.txt"
 
 
 def tokens(name):
-    return [
-        word
-        for line in (HERE / name).read_text(encoding="utf-8").splitlines()
-        for word in line.partition("#")[0].split()
-    ]
+    words = []
+    lines = (HERE / name).read_text(encoding="utf-8").splitlines()
+    for line in lines:
+        text = line.partition("#")[0]
+        for word in text.split():
+            words.append(word)
+    return words
 
 
 def digest(path):
     sha = hashlib.sha256()
     with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+        while True:
+            chunk = stream.read(1024 * 1024)
+            if not chunk:
+                break
             sha.update(chunk)
     return sha.hexdigest()
 
@@ -60,10 +65,10 @@ def wordnet(path):
                             if pos == "noun":
                                 nouns.add(word)
         with archive.extractfile("WordNet-3.0/dict/noun.exc") as stream:
-            exceptions = [
-                line.split() for line in io.TextIOWrapper(stream, encoding="ascii")
-                if line.strip()
-            ]
+            exceptions = []
+            for line in io.TextIOWrapper(stream, encoding="ascii"):
+                if line.strip():
+                    exceptions.append(line.split())
     return lowercase, nouns, exceptions
 
 
@@ -76,12 +81,18 @@ def vectors(path, candidates):
             word = word_bytes.decode("utf-8", errors="strict")
             if word not in candidates:
                 continue
-            values = tuple(map(float, values.split()))
+            numbers = []
+            for value in values.split():
+                numbers.append(float(value))
+            values = tuple(numbers)
             length = hypot(*values)
             if len(values) != 100 or not isfinite(length) or length == 0 or word in result:
                 unusable.add(word)
                 continue
-            result[word] = tuple(value / length for value in values)
+            normalized = []
+            for value in values:
+                normalized.append(value / length)
+            result[word] = tuple(normalized)
     for word in unusable:
         result.pop(word, None)
     return result, unusable
@@ -99,7 +110,10 @@ def regular_plural(word):
 
 def aliases(vocab, lexicon, nouns, exceptions, exclude, frequent, reviewed):
     options = {}
-    irregular_lemmas = {lemma for row in exceptions for lemma in row[1:]}
+    irregular_lemmas = set()
+    for row in exceptions:
+        for lemma in row[1:]:
+            irregular_lemmas.add(lemma)
     for form, *lemmas in exceptions:
         options.setdefault(form, set()).update(lemmas)
     # Use the full noun lexicon to spot collisions, even with out-of-game lemmas.
@@ -122,6 +136,62 @@ def aliases(vocab, lexicon, nouns, exceptions, exclude, frequent, reviewed):
     return result
 
 
+def read_reviewed_aliases():
+    reviewed = {}
+    path = HERE / "reviewed-aliases.tsv"
+    for line in path.read_text(encoding="utf-8").splitlines():
+        form, lemma = line.split("\t")
+        reviewed[form] = lemma
+    return reviewed
+
+
+def unique_words(words):
+    # Keep the first occurrence: this order decides which words enter the dataset.
+    result = []
+    seen = set()
+    for word in words:
+        if word not in seen:
+            seen.add(word)
+            result.append(word)
+    return result
+
+
+def eligible_words(pool, eligible):
+    short_words = {"go", "do", "be", "in", "on", "up"}
+    result = []
+    for word in pool:
+        if word not in eligible:
+            continue
+        if len(word) >= 3 or word in short_words:
+            result.append(word)
+    return result
+
+
+def cosine_similarity(first_vector, second_vector):
+    # Both vectors already have length 1, so cosine is their dot product.
+    products = []
+    for first_value, second_value in zip(first_vector, second_vector):
+        products.append(first_value * second_value)
+    return fsum(products)
+
+
+def rank_words_for_puzzle(secret, vocabulary, word_vectors):
+    secret_vector = word_vectors[secret]
+    scores_and_words = []
+    for word in vocabulary:
+        if word == secret:
+            continue
+        score = cosine_similarity(secret_vector, word_vectors[word])
+        # Sort closest first; use alphabetical order when scores tie.
+        scores_and_words.append((-round(score, 12), word))
+
+    scores_and_words.sort()
+    ordered_words = [secret]
+    for _, word in scores_and_words:
+        ordered_words.append(word)
+    return ordered_words
+
+
 def export(args):
     glove_hash = checked_input(args.glove, GLOVE_SHA256)
     wn_hash = checked_input(args.wordnet, WORDNET_SHA256)
@@ -131,19 +201,22 @@ def export(args):
     exclude = set(tokens("exclude-words.txt"))
     if len(secrets) != DAYS or len(set(secrets)) != DAYS or set(secrets) - nouns:
         raise ValueError("Expected 31 distinct WordNet nouns as secrets")
-    inflections = {row[0] for row in exceptions if row[0] not in lexicon}
-    reviewed = dict(line.split("\t") for line in
-                    (HERE / "reviewed-aliases.tsv").read_text(encoding="utf-8").splitlines())
+    inflections = set()
+    for row in exceptions:
+        if row[0] not in lexicon:
+            inflections.add(row[0])
+    reviewed = read_reviewed_aliases()
     eligible = lexicon - exclude - inflections - reviewed.keys()
     required = set(secrets) | set(extras) | set(reviewed.values())
     frequencies = top_n_list("en", 100_000, wordlist="large")
-    pool = list(dict.fromkeys(secrets + extras + sorted(reviewed.values()) + frequencies[:40_000]))
-    candidates = [
-        word for word in pool
-        if word in eligible and (len(word) >= 3 or word in {"go", "do", "be", "in", "on", "up"})
-    ]
+    pool = unique_words(secrets + extras + sorted(reviewed.values()) + frequencies[:40_000])
+    candidates = eligible_words(pool, eligible)
     chosen_vectors, unusable = vectors(args.glove, set(candidates))
-    chosen = [word for word in candidates if word in chosen_vectors][:COUNT]
+    chosen = []
+    for word in candidates:
+        if word in chosen_vectors:
+            chosen.append(word)
+    chosen = chosen[:COUNT]
     vocab = set(chosen)
     missing_required = required - vocab
     if len(vocab) != COUNT or missing_required:
@@ -153,30 +226,30 @@ def export(args):
     rows = []
     report = []
     for secret in secrets:
-        reference = chosen_vectors[secret]
-
-        def key(word):
-            score = fsum(a * b for a, b in zip(reference, chosen_vectors[word]))
-            return -round(score, 12), word
-
-        ordered = [secret] + sorted(vocab - {secret}, key=key)
+        ordered = rank_words_for_puzzle(secret, vocab, chosen_vectors)
         rows.append(secret + "\t" + " ".join(ordered))
         report.append(secret + "\t" + " ".join(ordered[:50]))
     args.out.mkdir(parents=True, exist_ok=True)
+    alias_rows = []
+    for form in sorted(forms):
+        alias_rows.append(f"{form}\t{forms[form]}")
     outputs = {
         "puzzles.tsv": rows,
-        "aliases.tsv": [f"{form}\t{forms[form]}" for form in sorted(forms)],
+        "aliases.tsv": alias_rows,
     }
     for name, lines in outputs.items():
         (args.out / name).write_bytes(("\n".join(lines) + "\n").encode("utf-8"))
     if args.top:
         args.top.write_bytes(("\n".join(report) + "\n").encode("utf-8"))
+    output_hashes = {}
+    for name in outputs:
+        output_hashes[name] = digest(args.out / name)
     print(json.dumps({
         "dataset_version": "wordward-en-5000-31-v1",
         "canonical": len(vocab), "secrets": len(secrets), "aliases": len(forms),
         "candidates": len(candidates), "outside_vectors": len(set(candidates) - set(chosen_vectors)),
         "unusable_vectors": len(unusable), "glove_sha256": glove_hash, "wordnet_sha256": wn_hash,
-        "output_sha256": {name: digest(args.out / name) for name in outputs},
+        "output_sha256": output_hashes,
     }, indent=2))
 
 
