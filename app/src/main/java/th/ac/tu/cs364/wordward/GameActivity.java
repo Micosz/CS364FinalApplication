@@ -53,8 +53,8 @@ public final class GameActivity extends Activity {
         Instant now = Instant.now();
         LocalDate day = DailyWordProvider.dateAt(now);
         if (round == null || !day.equals(round.date)) {
-            round = storage.open(day);
             ranks = words.rankFor(DailyWordProvider.secret(day, words.daily()));
+            round = storage.open(day, ranks);
             screen.clearInput();
         }
         screen.show(round, "");
@@ -70,7 +70,7 @@ public final class GameActivity extends Activity {
         String notice = "";
         switch (result) {
             case ADDED:
-                storage.save(round);
+                storage.save(round, ranks);
                 screen.clearInput();
                 break;
             case UNKNOWN:
@@ -89,12 +89,11 @@ public final class GameActivity extends Activity {
     private void hint() {
         refreshDay();
         String word = hints.next(round, ranks);
-        if (word == null) {
+        if (word == null || !round.hint(word, ranks)) {
             screen.show(round, getString(R.string.no_hint));
             return;
         }
-        round.add(new GameRound.Entry(word, ranks.rank(word), true));
-        storage.save(round);
+        storage.save(round, ranks);
         screen.show(round, "");
     }
 
