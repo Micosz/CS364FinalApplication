@@ -17,7 +17,8 @@ import static org.junit.Assert.*;
 public class ProductionWordsTest {
     private static final Path ASSETS = Paths.get("src/main/assets");
 
-    @Test public void ranksTheSame5000CanonicalWordsInAll31Puzzles() throws IOException {
+    @Test
+    public void ranksTheSame5000CanonicalWordsInAll31Puzzles() throws IOException {
         WordRanker words = openProduction();
         List<String> secrets = words.daily();
         assertEquals(31, secrets.size());
@@ -35,39 +36,63 @@ public class ProductionWordsTest {
                 assertEquals(word, words.canonical(word));
                 assertEquals(rank, ranks.rank(word));
             }
-            if (expected.isEmpty()) expected.addAll(found);
+            if (expected.isEmpty()) {
+                expected.addAll(found);
+            }
             assertEquals(expected, found);
         }
     }
 
-    @Test public void resolvesAllAliasesAndRejectsUnknownWords() throws IOException {
+    @Test
+    public void resolvesEveryAliasToARankedCanonicalWord() throws IOException {
         WordRanker words = openProduction();
         Set<String> forms = new HashSet<>();
         WordRanker.Ranking ranks = words.rankFor("ocean");
-        for (int rank = 1; rank <= ranks.size(); rank++) forms.add(ranks.wordAt(rank));
+        for (int rank = 1; rank <= ranks.size(); rank++) {
+            forms.add(ranks.wordAt(rank));
+        }
         for (String row : Files.readAllLines(ASSETS.resolve("aliases.tsv"))) {
             String[] fields = row.split("\\t", -1);
             assertEquals(2, fields.length);
-            assertTrue(fields[0].matches("[a-z]+"));
-            assertTrue("Duplicate form: " + fields[0], forms.add(fields[0]));
-            assertEquals(fields[1], words.canonical(fields[0]));
-            assertEquals(fields[1], ranks.wordAt(ranks.rank(fields[1])));
+            String alias = fields[0];
+            String canonicalWord = fields[1];
+            assertTrue(alias.matches("[a-z]+"));
+            assertTrue("Duplicate form: " + alias, forms.add(alias));
+            assertEquals(canonicalWord, words.canonical(alias));
+            int rank = ranks.rank(canonicalWord);
+            assertEquals(canonicalWord, ranks.wordAt(rank));
         }
+    }
+
+    @Test
+    public void normalizesGuessesAndRejectsUnknownWords() throws IOException {
+        WordRanker words = openProduction();
         assertEquals("apple", words.canonical("  APPLES "));
         assertEquals("child", words.canonical("CHILDREN"));
         assertNull(words.canonical(""));
         assertNull(words.canonical("not-in-vocabulary"));
         assertNull(words.canonical("qzxqzxzz"));
+    }
+
+    @Test
+    public void oceanRanksSeaCloserThanPencil() throws IOException {
+        WordRanker words = openProduction();
+        WordRanker.Ranking ranks = words.rankFor("ocean");
         assertTrue(ranks.rank("sea") < ranks.rank("pencil"));
         assertTrue(ranks.rank("blue") > 1);
     }
 
-    @Test public void rejectsCorruptPuzzleRowsAndAliasCollisions() {
+    @Test
+    public void rejectsCorruptPuzzleRows() {
         assertThrows(IOException.class, () -> load("sea sea water\n", ""));
         assertThrows(IOException.class, () -> load("sea\tsea sea\n", ""));
         assertThrows(IOException.class, () -> load("sea\twater sea\n", ""));
         assertThrows(IOException.class, () -> load("sea\tsea water\nwater\twater\n", ""));
         assertThrows(IOException.class, () -> load("sea\tsea water\nsea\tsea water\n", ""));
+    }
+
+    @Test
+    public void rejectsAliasCollisionsAndUnknownTargets() {
         assertThrows(IOException.class, () -> load("sea\tsea water\n", "sea\twater\n"));
         assertThrows(IOException.class, () -> load("sea\tsea water\n", "seas\tunknown\n"));
     }
