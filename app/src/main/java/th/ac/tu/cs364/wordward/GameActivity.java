@@ -2,41 +2,50 @@ package th.ac.tu.cs364.wordward;
 
 import android.app.Activity;
 import android.content.Context;
-import android.content.res.Configuration;
-import android.os.*;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.widget.EditText;
 import java.io.IOException;
-import java.time.*;
-import java.util.*;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.Random;
 
 public final class GameActivity extends Activity {
     private GameStorage storage;
-    private WordRanker words;
-    private WordRanker.Ranking ranks;
-    private GameRound round;
+    private GameSession session;
     private GameScreen screen;
+    private ExitConfirmation exitConfirmation;
+    private String restoredDraft;
+    private String restoredDraftDay;
+    private boolean restoredRecoveryNotice;
     private final HintEngine hints = new HintEngine(new Random());
     private final Handler timer = new Handler(Looper.getMainLooper());
     private final Runnable midnight = this::refreshDay;
 
     @Override protected void attachBaseContext(Context base) {
-        String language = new GameStorage(base).language();
-        if (!language.isEmpty()) {
-            Configuration config = new Configuration(base.getResources().getConfiguration());
-            config.setLocale(Locale.forLanguageTag(language));
-            base = base.createConfigurationContext(config);
-        }
-        super.attachBaseContext(base);
+        super.attachBaseContext(GameAppearance.wrap(base));
     }
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         storage = new GameStorage(this);
         try {
-            words = new WordRanker(getAssets().open("puzzles.tsv"), getAssets().open("aliases.tsv"));
+            WordRanker words = new WordRanker(getAssets().open("puzzles.tsv"), getAssets().open("aliases.tsv"));
+            session = new GameSession(words, storage, Clock.systemUTC());
         } catch (IOException error) {
             throw new IllegalStateException("Invalid bundled dictionary", error);
         }
-        screen = new GameScreen(this, this::guess, this::hint, this::switchLanguage);
+        screen = new GameScreen(this, this::guess, this::hint, this::switchLanguage,
+                this::restartRound, this::switchTheme);
+        exitConfirmation = new ExitConfirmation(this);
+        if (state != null) {
+            restoredDraft = state.getString("draft");
+            restoredDraftDay = state.getString("draft_day");
+            restoredRecoveryNotice = state.getBoolean("recovery_notice");
+        }
     }
 
     @Override protected void onResume() {
@@ -49,57 +58,101 @@ public final class GameActivity extends Activity {
         super.onPause();
     }
 
-    private void refreshDay() {
-        Instant now = Instant.now();
-        LocalDate day = DailyWordProvider.dateAt(now);
-        if (round == null || !day.equals(round.date)) {
-            ranks = words.rankFor(DailyWordProvider.secret(day, words.daily()));
-            round = storage.open(day, ranks);
-            screen.clearInput();
-        }
-        screen.show(round, "");
+    @Override protected void onStop() {
+        exitConfirmation.dismiss();
+        super.onStop();
+    }
+
+    @Override protected void onDestroy() {
         timer.removeCallbacks(midnight);
-        Instant next = day.plusDays(1).atStartOfDay(DailyWordProvider.BANGKOK).toInstant();
+        if (exitConfirmation != null) exitConfirmation.close();
+        super.onDestroy();
+    }
+
+    @Override protected void onSaveInstanceState(Bundle state) {
+        super.onSaveInstanceState(state);
+        EditText input = findViewById(R.id.input);
+        state.putString("draft", input.getText().toString());
+        if (session.round() != null) state.putString("draft_day", session.round().date.toString());
+        state.putBoolean("recovery_notice", session.hasRecoveryNotice());
+    }
+
+    // API 33+ uses ExitConfirmation's registered OnBackInvokedCallback.
+    // Keep this override for API 24–32; it is not the modern gesture handler.
+    @Override @android.annotation.SuppressLint("GestureBackNavigation")
+    @SuppressWarnings("deprecation") public void onBackPressed() {
+        exitConfirmation.show();
+    }
+
+    private void refreshDay() {
+        if (session.refresh()) screen.clearInput();
+        if (restoredDraft != null) {
+            if (session.round().date.toString().equals(restoredDraftDay)
+                    && session.round().status == GameRound.Status.PLAYING) {
+                ((EditText) findViewById(R.id.input)).setText(restoredDraft);
+                session.restoreRecoveryNotice(restoredRecoveryNotice);
+            }
+            restoredDraft = null;
+        }
+        render("", null);
+        timer.removeCallbacks(midnight);
+        Instant now = Instant.now();
+        Instant next = DailyWordProvider.dateAt(now).plusDays(1)
+                .atStartOfDay(DailyWordProvider.BANGKOK).toInstant();
         timer.postDelayed(midnight, Duration.between(now, next).toMillis() + 1);
+    }
+
+    private void render(String notice, String repeated) {
+        screen.setVocabularySize(session.vocabularySize());
+        String message = notice;
+        if (message.isEmpty() && session.hasRecoveryNotice()) message = getString(R.string.recovery_notice);
+        screen.show(session.round(), message, repeated);
     }
 
     private void guess(String raw) {
         refreshDay();
-        String word = words.canonical(raw);
-        GameRound.GuessResult result = round.guess(word, ranks);
+        GameSession.GuessOutcome outcome = session.guess(raw);
         String notice = "";
-        switch (result) {
+        String repeated = null;
+        switch (outcome.result) {
             case ADDED:
-                storage.save(round, ranks);
                 screen.clearInput();
                 break;
             case UNKNOWN:
                 notice = getString(R.string.unknown);
                 break;
             case REPEAT:
-                notice = getString(R.string.repeat, word, ranks.rank(word));
+                repeated = outcome.canonical;
+                GameRound.Entry entry = session.round().entry(repeated);
+                notice = getString(R.string.repeat, entry.word, entry.rank);
                 screen.clearInput();
                 break;
             case CLOSED:
                 break;
         }
-        screen.show(round, notice);
+        render(notice, repeated);
     }
 
     private void hint() {
         refreshDay();
-        String word = hints.next(round, ranks);
-        if (word == null || !round.hint(word, ranks)) {
-            screen.show(round, getString(R.string.no_hint));
-            return;
-        }
-        storage.save(round, ranks);
-        screen.show(round, "");
+        render(session.hint(hints) ? "" : getString(R.string.no_hint), null);
+    }
+
+    private void restartRound() {
+        LocalDate confirmedDate = session.round().date;
+        boolean restarted = session.restart(confirmedDate);
+        screen.clearInput();
+        render(restarted ? "" : getString(R.string.restart_day_changed), null);
     }
 
     private void switchLanguage() {
         String current = getResources().getConfiguration().getLocales().get(0).getLanguage();
         storage.language("th".equals(current) ? "en" : "th");
+        recreate();
+    }
+
+    private void switchTheme() {
+        // GameScreen already saved the new preference before invoking this callback.
         recreate();
     }
 }
