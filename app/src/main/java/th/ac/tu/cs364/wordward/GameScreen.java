@@ -1,5 +1,6 @@
 package th.ac.tu.cs364.wordward;
 
+import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
@@ -8,11 +9,14 @@ import android.content.res.Configuration;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
+import android.graphics.LinearGradient;
+import android.graphics.Outline;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
@@ -26,10 +30,12 @@ import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
+import android.view.animation.LinearInterpolator;
 import android.view.inputmethod.EditorInfo;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.PopupMenu;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import java.time.Instant;
@@ -44,6 +50,74 @@ final class GameScreen {
     private static final String PREFS_NAME = "daily_game_v1";
     private static final String KEY_THEME = "theme";
     private static final int DEFAULT_VOCAB_SIZE = 5000;
+    private static final long GOLD_SHIMMER_DURATION_MS = 2500L;
+
+    private static final int[] GOLD_GRADIENT_STOPS = new int[] {
+        0xFFFFF4B8, // Stop 1: Champagne Highlight
+        0xFFFFD700, // Stop 2: Bright Pure Gold
+        0xFFF0B400, // Stop 3: Rich Metallic Gold
+        0xFFC98A00, // Stop 4: Warm Deep Gold Shadow
+        0xFFFFE47A  // Stop 5: Secondary Edge Sheen
+    };
+
+    private static final float[] GOLD_GRADIENT_POSITIONS = new float[] {
+        0.0f, 0.24f, 0.52f, 0.78f, 1.0f
+    };
+
+    private static final int[] GOLD_SHIMMER_STOPS = new int[] {
+        0x00FFFFFF,
+        0x44FFF4B8,
+        0x99FFFDF0,
+        0x44FFF4B8,
+        0x00FFFFFF
+    };
+
+    private static final float[] GOLD_SHIMMER_POSITIONS = new float[] {
+        0.0f, 0.30f, 0.50f, 0.70f, 1.0f
+    };
+
+    static int[] goldGradientStops() {
+        return GOLD_GRADIENT_STOPS.clone();
+    }
+
+    static int[] goldShimmerStops() {
+        return new int[] { 0x00FFFFFF, 0x99FFFDF0, 0x00FFFFFF };
+    }
+
+    static int goldOuterBorderColor(boolean night) {
+        return night ? 0xFFFFF3A1 : 0xFFB87D00;
+    }
+
+    static int goldInnerHighlightColor() {
+        return 0xFFFFF3A1;
+    }
+
+    static int goldTextColor() {
+        return 0xFF241500;
+    }
+
+    static boolean shouldShowEntryBadge(GameRound.Entry entry, boolean isRepeatTarget) {
+        if (entry == null) return false;
+        return entry.isHint || isRepeatTarget;
+    }
+
+    static int pinnedLatestBorderColor(boolean night) {
+        return night ? 0xFFE2E8F0 : 0xFF1E293B;
+    }
+
+    static String normalizeSubmittedGuess(String raw) {
+        if (raw == null) return "";
+        return raw.trim();
+    }
+
+    static boolean shouldSubmitEditorAction(int actionId, int keyAction, int keyCode) {
+        if (keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER) {
+            return keyAction == KeyEvent.ACTION_DOWN;
+        }
+        return actionId == EditorInfo.IME_ACTION_DONE
+                || actionId == EditorInfo.IME_ACTION_GO
+                || actionId == EditorInfo.IME_ACTION_SEND;
+    }
 
     private static int closeLimitFor(int cap) {
         if (cap < 100) return Math.max(2, (int) Math.floor(cap * 0.25));
@@ -150,8 +224,8 @@ final class GameScreen {
         if (tier == RankTier.PASTEL_GREEN) {
             float clamped = Math.max(0.62f, Math.min(0.96f, fraction));
             float t = (clamped - 0.62f) / 0.34f;
-            int outerGreen = night ? 0xFF1B523B : 0xFFB5E8C8;
-            int innerGreen = night ? 0xFF2F9469 : 0xFF58C98B;
+            int outerGreen = night ? 0xFF1B4A37 : 0xFFC4F0D8;
+            int innerGreen = night ? 0xFF24634A : 0xFF94E2B8;
             return blendColor(outerGreen, innerGreen, t);
         }
         if (tier == RankTier.WARM_AMBER) return p.warmAmber.fill;
@@ -169,16 +243,21 @@ final class GameScreen {
 
     private final Activity activity;
     private final ScrollView scrollView;
+    private final View inputBar;
     private final EditText input;
     private final Button guessButton;
     private final Button hintButton;
+    private final Button menuButton;
     private final Button languageButton;
     private final Button themeButton;
     private final Button restartButton;
     private final TextView noticeView;
     private final LinearLayout latestRowHolder;
+    private final View latestDivider;
     private final LinearLayout historyContainer;
     private final TextView historyEmptyView;
+    private final Runnable onHintCallback;
+    private final Runnable onLanguageCallback;
     private final Runnable onRestartCallback;
     private final Runnable onThemeCallback;
 
@@ -190,6 +269,8 @@ final class GameScreen {
     private int attemptsBeforePendingGuess = -1;
     private boolean inputClearedSinceGuess;
     private AlertDialog restartDialog;
+    private AlertDialog howToPlayDialog;
+    private PopupMenu activePopupMenu;
 
     GameScreen(Activity activity, Consumer<String> onGuess, Runnable onHint, Runnable onLanguage) {
         this(activity, onGuess, onHint, onLanguage, null, null);
@@ -204,6 +285,8 @@ final class GameScreen {
             Runnable onRestart,
             Runnable onTheme) {
         this.activity = activity;
+        this.onHintCallback = onHint;
+        this.onLanguageCallback = onLanguage;
         this.onRestartCallback = onRestart;
         this.onThemeCallback = onTheme;
 
@@ -215,7 +298,17 @@ final class GameScreen {
         activity.setContentView(R.layout.activity_game);
         scrollView = activity.findViewById(R.id.screen);
         scrollView.setFitsSystemWindows(false);
+        scrollView.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+            @Override
+            public void onViewAttachedToWindow(View v) {}
+
+            @Override
+            public void onViewDetachedFromWindow(View v) {
+                dismissDialogSafely();
+            }
+        });
         final int basePad = dp(16);
+        final int topPad = dp(10);
         final int extraBottomPad = dp(28);
         final View content = activity.findViewById(R.id.content_container);
         content.setFitsSystemWindows(false);
@@ -239,7 +332,7 @@ final class GameScreen {
             }
             content.setPadding(
                     basePad + left,
-                    basePad + top,
+                    topPad + top,
                     basePad + right,
                     extraBottomPad + bottom);
             boolean night = resolveCurrentNightMode();
@@ -248,54 +341,80 @@ final class GameScreen {
         });
         scrollView.requestApplyInsets();
 
+        inputBar = activity.findViewById(R.id.input_bar);
         input = activity.findViewById(R.id.input);
         guessButton = activity.findViewById(R.id.guess);
         hintButton = activity.findViewById(R.id.hint);
+        menuButton = activity.findViewById(R.id.menu_button);
         languageButton = activity.findViewById(R.id.language);
         themeButton = activity.findViewById(R.id.theme);
         restartButton = activity.findViewById(R.id.restart);
         noticeView = activity.findViewById(R.id.notice);
         latestRowHolder = activity.findViewById(R.id.latest_row_holder);
+        latestDivider = activity.findViewById(R.id.latest_divider);
         historyContainer = activity.findViewById(R.id.history);
         historyEmptyView = activity.findViewById(R.id.history_empty);
+        if (latestRowHolder != null) {
+            latestRowHolder.setClipToPadding(false);
+            latestRowHolder.setClipChildren(false);
+        }
+        if (historyContainer != null) {
+            historyContainer.setClipToPadding(false);
+            historyContainer.setClipChildren(false);
+        }
 
         Runnable submitGuess = () -> {
-            String raw = input.getText().toString();
-            pendingGuessRaw = raw;
+            String trimmed = normalizeSubmittedGuess(
+                    input.getText() != null ? input.getText().toString() : null);
+            if (trimmed.isEmpty()) {
+                return;
+            }
+            pendingGuessRaw = trimmed;
             attemptsBeforePendingGuess = currentRound != null ? currentRound.attempts() : -1;
             inputClearedSinceGuess = false;
-            onGuess.accept(raw);
+            onGuess.accept(trimmed);
         };
 
-        guessButton.setOnClickListener(v -> submitGuess.run());
+        if (guessButton != null) {
+            guessButton.setOnClickListener(v -> submitGuess.run());
+        }
         input.setOnEditorActionListener((v, action, event) -> {
-            boolean isEnterKey = event != null
-                    && event.getAction() == KeyEvent.ACTION_DOWN
-                    && event.getKeyCode() == KeyEvent.KEYCODE_ENTER;
-            if (action == EditorInfo.IME_ACTION_GO
-                    || action == EditorInfo.IME_ACTION_DONE
-                    || action == EditorInfo.IME_ACTION_SEND
-                    || isEnterKey) {
+            int keyAction = event != null ? event.getAction() : -1;
+            int keyCode = event != null ? event.getKeyCode() : KeyEvent.KEYCODE_UNKNOWN;
+            boolean isEnterKeyEvent = event != null
+                    && (keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER);
+            if (shouldSubmitEditorAction(action, keyAction, keyCode)) {
                 submitGuess.run();
                 return true;
             }
-            return false;
+            return isEnterKeyEvent;
         });
 
-        hintButton.setOnClickListener(v -> {
+        Runnable triggerHint = () -> {
             pendingGuessRaw = null;
             attemptsBeforePendingGuess = -1;
             inputClearedSinceGuess = false;
             onHint.run();
-        });
+        };
 
-        languageButton.setOnClickListener(v -> {
-            dismissDialogSafely();
-            onLanguage.run();
-        });
+        hintButton.setOnClickListener(v -> triggerHint.run());
 
-        themeButton.setOnClickListener(v -> toggleTheme());
-        restartButton.setOnClickListener(v -> showRestartConfirmationDialog());
+        if (menuButton != null) {
+            menuButton.setOnClickListener(this::showOverflowMenu);
+        }
+
+        if (languageButton != null) {
+            languageButton.setOnClickListener(v -> {
+                dismissDialogSafely();
+                onLanguage.run();
+            });
+        }
+        if (themeButton != null) {
+            themeButton.setOnClickListener(v -> toggleTheme());
+        }
+        if (restartButton != null) {
+            restartButton.setOnClickListener(v -> showRestartConfirmationDialog());
+        }
 
         applyThemePalette(resolveCurrentNightMode());
     }
@@ -355,34 +474,44 @@ final class GameScreen {
 
         boolean playing = round.status == GameRound.Status.PLAYING;
         long puzzleNumber = DailyWordProvider.number(round.date);
+        text(R.id.title, activity.getString(R.string.top_bar_title, puzzleNumber));
         text(R.id.day, activity.getString(R.string.date_with_number, puzzleNumber, round.date.toString()));
 
         GameRound.Entry latest = round.latest();
-        text(R.id.totals, activity.getString(R.string.totals, round.attempts(), round.guesses(), round.hints()));
+        text(R.id.totals, activity.getString(R.string.top_bar_totals, round.guesses(), round.hints()));
 
-        // Latest Entry Card
+        if (hintButton != null) {
+            hintButton.setText(round.hints() > 0 ? "💡 " + round.hints() : "💡");
+        }
+
+        // Single Pinned Latest Guess Slot (Contexto-style thin dark outline border)
         latestRowHolder.removeAllViews();
         if (latest == null) {
             text(R.id.latest, activity.getString(R.string.latest_empty));
             latestRowHolder.setVisibility(View.GONE);
+            if (latestDivider != null) {
+                latestDivider.setVisibility(View.GONE);
+            }
         } else {
             text(R.id.latest, activity.getString(R.string.latest, latest.word, latest.rank));
             latestRowHolder.setVisibility(View.VISIBLE);
-            latestRowHolder.addView(buildEntryRow(latest, false, night));
+            latestRowHolder.addView(buildEntryRow(latest, false, true, night));
+            if (latestDivider != null) {
+                latestDivider.setVisibility(View.VISIBLE);
+            }
         }
 
-        // Notice / Win Status Banner
+        // Compact Status / Error / Win Notice Banner (no triple-repeated secret word)
         GameRound.Entry repeatedEntry = resolveRepeatTarget(round, repeatedWord);
         if (!playing && latest != null) {
             String wonText = activity.getString(
-                    R.string.won_detail,
-                    latest.word,
+                    R.string.won_compact,
                     round.attempts(),
                     round.guesses(),
                     round.hints());
             noticeView.setText(wonText);
             noticeView.setVisibility(View.VISIBLE);
-            styleBanner(noticeView, Palette.forMode(night).wonBg, Palette.forMode(night).wonBorder, Palette.forMode(night).wonText);
+            styleVictoryBanner(noticeView, night);
         } else if (!this.currentNotice.isEmpty()) {
             noticeView.setText(this.currentNotice);
             noticeView.setVisibility(View.VISIBLE);
@@ -397,7 +526,7 @@ final class GameScreen {
             noticeView.setVisibility(View.GONE);
         }
 
-        // Sorted Ranking List
+        // Flat Sorted Ranking List
         historyContainer.removeAllViews();
         List<GameRound.Entry> sortedEntries = round.sorted();
         int effectiveVocabSize = vocabularySize;
@@ -417,7 +546,7 @@ final class GameScreen {
             View targetScrollRow = null;
             for (GameRound.Entry entry : sortedEntries) {
                 boolean isRepeatTarget = repeatedEntry != null && repeatedEntry.word.equals(entry.word);
-                View rowView = buildEntryRow(entry, isRepeatTarget, night);
+                View rowView = buildEntryRow(entry, isRepeatTarget, false, night);
                 rowView.setTag(entry.word);
                 historyContainer.addView(rowView);
                 if (isRepeatTarget) {
@@ -431,49 +560,96 @@ final class GameScreen {
         }
 
         input.setEnabled(playing);
-        guessButton.setEnabled(playing);
+        if (guessButton != null) {
+            guessButton.setEnabled(playing);
+            guessButton.setAlpha(playing ? 1.0f : 0.5f);
+        }
         hintButton.setEnabled(playing);
-        guessButton.setAlpha(playing ? 1.0f : 0.5f);
-        hintButton.setAlpha(playing ? 1.0f : 0.5f);
-        restartButton.setEnabled(true);
+        hintButton.setAlpha(playing ? 1.0f : 0.45f);
+        if (restartButton != null) {
+            restartButton.setEnabled(true);
+        }
     }
 
-    private View buildEntryRow(GameRound.Entry entry, boolean isRepeatTarget, boolean night) {
+    private View buildEntryRow(GameRound.Entry entry, boolean isRepeatTarget, boolean isPinnedLatest, boolean night) {
         Palette p = Palette.forMode(night);
         RankTier tier = rankTier(entry.rank, vocabularySize);
         float fraction = barFraction(entry.rank, vocabularySize);
+        boolean isGold = tier == RankTier.GOLD;
 
         TierColors tc = p.colorsFor(tier, fraction, night);
-        int borderColor = isRepeatTarget ? p.repeatBorder : tc.border;
-        int borderWidthPx = isRepeatTarget ? dp(3) : (tier == RankTier.GOLD ? dp(2) : dp(1));
+        int borderColor;
+        int borderWidthPx;
+        if (isRepeatTarget) {
+            borderColor = p.repeatBorder;
+            borderWidthPx = dp(3);
+        } else if (isGold) {
+            borderColor = goldOuterBorderColor(night);
+            borderWidthPx = dp(2);
+        } else if (isPinnedLatest) {
+            borderColor = pinnedLatestBorderColor(night);
+            borderWidthPx = dp(2);
+        } else {
+            borderColor = tc.border;
+            borderWidthPx = dp(1);
+        }
 
         LinearLayout row = new LinearLayout(activity);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setMinimumHeight(dp(46));
-        row.setPadding(dp(14), dp(10), dp(14), dp(10));
         LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT);
-        rowLp.topMargin = dp(6);
+        rowLp.topMargin = dp(isGold ? 8 : 6);
+        if (isGold) {
+            rowLp.bottomMargin = dp(4);
+        }
         row.setLayoutParams(rowLp);
-        row.setBackground(new RankBarDrawable(tc.track, tc.fill, borderColor, borderWidthPx, dp(10), fraction));
+
+        if (isGold) {
+            MetallicGoldDrawable goldDrawable = new MetallicGoldDrawable(
+                    borderColor,
+                    goldInnerHighlightColor(),
+                    borderWidthPx,
+                    Math.max(1, dp(1)),
+                    dp(10),
+                    !night);
+            row.setBackground(goldDrawable);
+            row.setElevation(dp(6));
+            if (android.os.Build.VERSION.SDK_INT >= 28) {
+                row.setOutlineSpotShadowColor(0xFFFFD700);
+                row.setOutlineAmbientShadowColor(0xFFFFD700);
+            }
+            attachGoldShimmerAnimator(row, goldDrawable);
+        } else {
+            row.setBackground(new RankBarDrawable(tc.track, tc.fill, borderColor, borderWidthPx, dp(10), fraction));
+        }
+        row.setPadding(dp(16), dp(10), dp(16), dp(10));
+        row.setPaddingRelative(dp(16), dp(10), dp(16), dp(10));
+
+        int rowTextColor = isGold ? goldTextColor() : tc.text;
 
         // Left: Canonical Word
         TextView wordView = new TextView(activity);
         wordView.setText(entry.word);
-        wordView.setTextColor(tc.text);
+        wordView.setTextColor(rowTextColor);
         wordView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
         wordView.setTypeface(Typeface.DEFAULT_BOLD);
+        if (isGold) {
+            wordView.setShadowLayer(dp(1), 0f, dp(1) * 0.6f, 0xAAFFF4B8);
+        }
         LinearLayout.LayoutParams wordLp = new LinearLayout.LayoutParams(
                 0,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 1.0f);
+        wordLp.rightMargin = dp(8);
+        wordLp.setMarginEnd(dp(8));
         wordView.setLayoutParams(wordLp);
         row.addView(wordView);
 
-        // Middle: Status Badge (SECRET #1, HINT, or REPEATED)
-        if (entry.rank == 1 || entry.isHint || isRepeatTarget) {
+        // Middle: Status Badge (HINT or REPEATED only; Rank #1 omits redundant SECRET #1 badge)
+        if (shouldShowEntryBadge(entry, isRepeatTarget)) {
             TextView badge = new TextView(activity);
             String badgeLabel;
             if (isRepeatTarget) {
@@ -481,8 +657,6 @@ final class GameScreen {
                 if (entry.isHint) {
                     badgeLabel = badgeLabel + " · " + activity.getString(R.string.badge_hint);
                 }
-            } else if (entry.rank == 1) {
-                badgeLabel = activity.getString(R.string.badge_secret);
             } else {
                 badgeLabel = activity.getString(R.string.badge_hint);
             }
@@ -502,19 +676,62 @@ final class GameScreen {
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT);
             badgeLp.rightMargin = dp(10);
+            badgeLp.setMarginEnd(dp(10));
             badge.setLayoutParams(badgeLp);
             row.addView(badge);
         }
 
-        // Right: Rank Number (#rank)
+        // Right: Rank Number (#rank) with consistent end padding so #1 aligns vertically with #2, #3, #4
         TextView rankView = new TextView(activity);
         rankView.setText("#" + entry.rank);
-        rankView.setTextColor(tc.text);
+        rankView.setTextColor(rowTextColor);
         rankView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
         rankView.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        rankView.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+        rankView.setPadding(dp(4), 0, dp(2), 0);
+        rankView.setPaddingRelative(dp(4), 0, dp(2), 0);
+        if (isGold) {
+            rankView.setShadowLayer(dp(1), 0f, dp(1) * 0.6f, 0xAAFFF4B8);
+        }
+        LinearLayout.LayoutParams rankLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        rankLp.rightMargin = dp(2);
+        rankLp.setMarginEnd(dp(2));
+        rankView.setLayoutParams(rankLp);
         row.addView(rankView);
 
         return row;
+    }
+
+    private void attachGoldShimmerAnimator(View row, MetallicGoldDrawable drawable) {
+        final ValueAnimator animator = ValueAnimator.ofFloat(0.0f, 1.0f);
+        animator.setDuration(GOLD_SHIMMER_DURATION_MS);
+        animator.setRepeatCount(ValueAnimator.INFINITE);
+        animator.setRepeatMode(ValueAnimator.RESTART);
+        animator.setInterpolator(new LinearInterpolator());
+        animator.addUpdateListener(anim -> {
+            Object value = anim.getAnimatedValue();
+            if (value instanceof Float) {
+                drawable.setShimmerProgress((Float) value);
+            }
+        });
+        row.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+            @Override
+            public void onViewAttachedToWindow(View v) {
+                if (!animator.isStarted()) {
+                    animator.start();
+                    animator.setCurrentFraction(0.38f);
+                }
+            }
+
+            @Override
+            public void onViewDetachedFromWindow(View v) {
+                animator.cancel();
+            }
+        });
+        animator.start();
+        animator.setCurrentFraction(0.38f);
     }
 
     private void scrollToView(View targetRow) {
@@ -567,11 +784,107 @@ final class GameScreen {
         restartDialog.show();
     }
 
+    private void showOverflowMenu(View anchor) {
+        boolean night = resolveCurrentNightMode();
+        boolean playing = currentRound == null || currentRound.status == GameRound.Status.PLAYING;
+        PopupMenu popup = new PopupMenu(activity, anchor);
+        final int idHint = 1;
+        final int idLanguage = 2;
+        final int idTheme = 3;
+        final int idRestart = 4;
+        final int idHowToPlay = 5;
+
+        if (playing) {
+            popup.getMenu().add(0, idHint, 0, "💡 " + activity.getString(R.string.hint));
+        }
+        popup.getMenu().add(0, idLanguage, 1, activity.getString(R.string.switch_language));
+        popup.getMenu().add(
+                0,
+                idTheme,
+                2,
+                activity.getString(night ? R.string.switch_theme_day : R.string.switch_theme_night));
+        popup.getMenu().add(0, idRestart, 3, activity.getString(R.string.restart_round));
+        popup.getMenu().add(0, idHowToPlay, 4, activity.getString(R.string.menu_how_to_play));
+
+        popup.setOnMenuItemClickListener(item -> {
+            int itemId = item.getItemId();
+            if (itemId == idHint) {
+                if (onHintCallback != null) {
+                    pendingGuessRaw = null;
+                    attemptsBeforePendingGuess = -1;
+                    inputClearedSinceGuess = false;
+                    onHintCallback.run();
+                }
+                return true;
+            }
+            if (itemId == idLanguage) {
+                dismissDialogSafely();
+                if (onLanguageCallback != null) {
+                    onLanguageCallback.run();
+                }
+                return true;
+            }
+            if (itemId == idTheme) {
+                toggleTheme();
+                return true;
+            }
+            if (itemId == idRestart) {
+                showRestartConfirmationDialog();
+                return true;
+            }
+            if (itemId == idHowToPlay) {
+                showHowToPlayDialog();
+                return true;
+            }
+            return false;
+        });
+        popup.setOnDismissListener(menu -> {
+            if (activePopupMenu == menu) {
+                activePopupMenu = null;
+            }
+        });
+        activePopupMenu = popup;
+        popup.show();
+    }
+
+    private void showHowToPlayDialog() {
+        dismissDialogSafely();
+        String dayHeader = "";
+        String totalsLine = "";
+        if (currentRound != null) {
+            long puzzleNumber = DailyWordProvider.number(currentRound.date);
+            dayHeader = activity.getString(
+                    R.string.date_with_number,
+                    puzzleNumber,
+                    currentRound.date.toString()) + "\n\n";
+            totalsLine = "\n\n" + activity.getString(
+                    R.string.totals,
+                    currentRound.attempts(),
+                    currentRound.guesses(),
+                    currentRound.hints());
+        }
+        String message = dayHeader + activity.getString(R.string.rules) + totalsLine;
+        howToPlayDialog = new AlertDialog.Builder(activity)
+                .setTitle(R.string.menu_how_to_play)
+                .setMessage(message)
+                .setPositiveButton(R.string.how_to_play_close, (dialog, which) -> dialog.dismiss())
+                .create();
+        howToPlayDialog.show();
+    }
+
     private void dismissDialogSafely() {
+        if (activePopupMenu != null) {
+            activePopupMenu.dismiss();
+            activePopupMenu = null;
+        }
         if (restartDialog != null && restartDialog.isShowing()) {
             restartDialog.dismiss();
         }
         restartDialog = null;
+        if (howToPlayDialog != null && howToPlayDialog.isShowing()) {
+            howToPlayDialog.dismiss();
+        }
+        howToPlayDialog = null;
     }
 
     private boolean resolveCurrentNightMode() {
@@ -604,35 +917,40 @@ final class GameScreen {
         scrollView.setBackgroundColor(p.screenBg);
         applySystemBarsAppearance(night, p.screenBg);
 
-        styleCard(activity.findViewById(R.id.header_card), p.cardBg, p.cardBorder);
-        styleCard(activity.findViewById(R.id.input_card), p.cardBg, p.cardBorder);
-        styleCard(activity.findViewById(R.id.latest_card), p.cardBg, p.cardBorder);
-        styleCard(activity.findViewById(R.id.history_card), p.cardBg, p.cardBorder);
-
         setTextColor(R.id.title, p.brandText);
         setTextColor(R.id.day, p.secondaryText);
         setTextColor(R.id.rules, p.secondaryText);
-        setTextColor(R.id.latest_title, p.primaryText);
         setTextColor(R.id.totals, p.secondaryText);
         setTextColor(R.id.latest, p.secondaryText);
-        setTextColor(R.id.list_title, p.primaryText);
         setTextColor(R.id.history_empty, p.secondaryText);
 
-        GradientDrawable inputBg = new GradientDrawable();
-        inputBg.setColor(p.inputBg);
-        inputBg.setCornerRadius(dp(10));
-        inputBg.setStroke(dp(1), p.inputBorder);
-        input.setBackground(inputBg);
+        if (latestDivider != null) {
+            latestDivider.setBackgroundColor(p.cardBorder);
+        }
+
+        if (inputBar != null) {
+            GradientDrawable inputBarBg = new GradientDrawable();
+            inputBarBg.setColor(p.inputBg);
+            inputBarBg.setCornerRadius(dp(10));
+            inputBarBg.setStroke(dp(1), p.inputBorder);
+            inputBar.setBackground(inputBarBg);
+        }
+        input.setBackgroundColor(Color.TRANSPARENT);
         input.setTextColor(p.primaryText);
         input.setHintTextColor(p.secondaryText);
 
-        styleButton(guessButton, p.primaryAccent, p.onPrimaryText, p.primaryAccent);
         styleButton(hintButton, p.secondaryBtnBg, p.secondaryBtnText, p.cardBorder);
+        if (menuButton != null) {
+            styleButton(menuButton, p.secondaryBtnBg, p.primaryText, p.cardBorder);
+        }
+        styleButton(guessButton, p.primaryAccent, p.onPrimaryText, p.primaryAccent);
         styleButton(languageButton, p.secondaryBtnBg, p.secondaryBtnText, p.cardBorder);
         styleButton(themeButton, p.secondaryBtnBg, p.secondaryBtnText, p.cardBorder);
         styleButton(restartButton, p.restartBtnBg, p.restartBtnText, p.restartBorder);
 
-        themeButton.setText(night ? R.string.switch_theme_day : R.string.switch_theme_night);
+        if (themeButton != null) {
+            themeButton.setText(night ? R.string.switch_theme_day : R.string.switch_theme_night);
+        }
     }
 
     @SuppressWarnings("deprecation")
@@ -747,6 +1065,25 @@ final class GameScreen {
         drawable.setStroke(dp(2), borderColor);
         banner.setBackground(drawable);
         banner.setTextColor(textColor);
+        banner.setElevation(0f);
+    }
+
+    private void styleVictoryBanner(TextView banner, boolean night) {
+        int[] bannerColors = night
+                ? new int[] { 0xFF3A2A06, 0xFF2B1E04, 0xFF473308 }
+                : new int[] { 0xFFFFFBEB, 0xFFFFF1B8, 0xFFFFE580 };
+        GradientDrawable drawable = new GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                bannerColors);
+        drawable.setCornerRadius(dp(12));
+        drawable.setStroke(dp(2), night ? 0xFFFFF3A1 : 0xFFB87D00);
+        banner.setBackground(drawable);
+        banner.setTextColor(night ? 0xFFFFF4B8 : 0xFF241500);
+        banner.setElevation(dp(3));
+        if (android.os.Build.VERSION.SDK_INT >= 28) {
+            banner.setOutlineSpotShadowColor(0xFFFFD700);
+            banner.setOutlineAmbientShadowColor(0xFFFFD700);
+        }
     }
 
     private void styleButton(Button button, int bgColor, int textColor, int strokeColor) {
@@ -798,10 +1135,10 @@ final class GameScreen {
                 0xFFFFF4E0, 0xFFE6B45E, 0xFF734400,
                 0xFFFFF8D6, 0xFFD4A017, 0xFF5C4300,
                 0xFFDBEAFE, 0xFF2563EB, 0xFF1E3A8A,
-                new TierColors(0xFFF5C542, 0xFFFDF3D0, 0xFFC99710, 0xFF473300),
-                new TierColors(0xFF7ED9A4, 0xFFEAF8F0, 0xFF4EAD78, 0xFF0E3B25),
-                new TierColors(0xFFF6C683, 0xFFFDF3E6, 0xFFDA9840, 0xFF4C2D05),
-                new TierColors(0xFFF3A3A9, 0xFFFCECEF, 0xFFD56B74, 0xFF4F1419));
+                new TierColors(0xFFFFD700, 0xFFFFF4B8, 0xFFB87D00, 0xFF241500),
+                new TierColors(0xFFA8E6C3, 0xFFFFFFFF, 0xFFDCE5E0, 0xFF0F291E),
+                new TierColors(0xFFFDE0A6, 0xFFFFFFFF, 0xFFDCE5E0, 0xFF2E1B03),
+                new TierColors(0xFFFACAD0, 0xFFFFFFFF, 0xFFDCE5E0, 0xFF381015));
 
         private static final Palette NIGHT = new Palette(
                 0xFF0E1714, 0xFF172621, 0xFF2B433B,
@@ -813,10 +1150,10 @@ final class GameScreen {
                 0xFF332510, 0xFFB47B22, 0xFFFDE68A,
                 0xFF382C0C, 0xFFEAB308, 0xFFFEF08A,
                 0xFF1E3A5F, 0xFF60A5FA, 0xFFBFDBFE,
-                new TierColors(0xFFCA920E, 0xFF2E230A, 0xFFFACC15, 0xFFFEF9C3),
-                new TierColors(0xFF246E4E, 0xFF142E23, 0xFF6EE7B7, 0xFFD1FAE5),
-                new TierColors(0xFF7C4D16, 0xFF2B1E11, 0xFFFBBF24, 0xFFFDE68A),
-                new TierColors(0xFF742832, 0xFF2A1418, 0xFFFB7185, 0xFFFECDD3));
+                new TierColors(0xFFFFD700, 0xFFFFF4B8, 0xFFFFF3A1, 0xFF241500),
+                new TierColors(0xFF1F5741, 0xFF16241F, 0xFF263D35, 0xFFECFDF5),
+                new TierColors(0xFF543A16, 0xFF16241F, 0xFF263D35, 0xFFFEF3C7),
+                new TierColors(0xFF52222A, 0xFF16241F, 0xFF263D35, 0xFFFFE4E6));
 
         final int screenBg;
         final int cardBg;
@@ -974,6 +1311,172 @@ final class GameScreen {
             trackPaint.setColorFilter(colorFilter);
             fillPaint.setColorFilter(colorFilter);
             borderPaint.setColorFilter(colorFilter);
+        }
+
+        @Override
+        public void getOutline(Outline outline) {
+            Rect bounds = getBounds();
+            if (!bounds.isEmpty()) {
+                outline.setRoundRect(bounds, cornerRadius);
+                outline.setAlpha(0.6f);
+            }
+        }
+
+        @Override
+        @SuppressWarnings("deprecation")
+        public int getOpacity() {
+            return PixelFormat.TRANSLUCENT;
+        }
+    }
+
+    private static final class MetallicGoldDrawable extends Drawable {
+        private final Paint basePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint sheenPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint shimmerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint innerBorderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint outerBorderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Path clipPath = new Path();
+        private final RectF rect = new RectF();
+        private final RectF innerRect = new RectF();
+        private final RectF topSheenRect = new RectF();
+        private final float cornerRadius;
+        private final float outerInset;
+        private final float innerInset;
+        private final boolean drawInnerHighlight;
+        private float shimmerProgress = 0.38f;
+
+        MetallicGoldDrawable(
+                int outerBorderColor,
+                int innerHighlightColor,
+                int outerBorderWidthPx,
+                int innerHighlightWidthPx,
+                int cornerRadiusPx,
+                boolean drawInnerHighlight) {
+            basePaint.setStyle(Paint.Style.FILL);
+            sheenPaint.setStyle(Paint.Style.FILL);
+            shimmerPaint.setStyle(Paint.Style.FILL);
+
+            outerBorderPaint.setStyle(Paint.Style.STROKE);
+            outerBorderPaint.setStrokeWidth(outerBorderWidthPx);
+            outerBorderPaint.setColor(outerBorderColor);
+
+            innerBorderPaint.setStyle(Paint.Style.STROKE);
+            innerBorderPaint.setStrokeWidth(innerHighlightWidthPx);
+            innerBorderPaint.setColor(innerHighlightColor);
+
+            this.cornerRadius = cornerRadiusPx;
+            this.outerInset = outerBorderWidthPx / 2.0f;
+            this.innerInset = outerBorderWidthPx + (innerHighlightWidthPx / 2.0f);
+            this.drawInnerHighlight = drawInnerHighlight;
+        }
+
+        void setShimmerProgress(float progress) {
+            this.shimmerProgress = Math.max(0.0f, Math.min(1.0f, progress));
+            invalidateSelf();
+        }
+
+        @Override
+        public void draw(Canvas canvas) {
+            Rect bounds = getBounds();
+            if (bounds.isEmpty()) return;
+
+            rect.set(
+                    bounds.left + outerInset,
+                    bounds.top + outerInset,
+                    bounds.right - outerInset,
+                    bounds.bottom - outerInset);
+
+            float width = rect.width();
+            float height = rect.height();
+            if (width <= 0 || height <= 0) return;
+
+            // 1. Multi-stop 45-degree diagonal metallic gold gradient
+            LinearGradient goldGradient = new LinearGradient(
+                    rect.left,
+                    rect.top - height * 0.45f,
+                    rect.right,
+                    rect.bottom + height * 0.45f,
+                    GOLD_GRADIENT_STOPS,
+                    GOLD_GRADIENT_POSITIONS,
+                    Shader.TileMode.CLAMP);
+            basePaint.setShader(goldGradient);
+
+            int save = canvas.save();
+            clipPath.reset();
+            clipPath.addRoundRect(rect, cornerRadius, cornerRadius, Path.Direction.CW);
+            canvas.clipPath(clipPath);
+
+            canvas.drawRect(rect, basePaint);
+
+            // Top metallic specular highlight along the upper bevel
+            topSheenRect.set(rect.left, rect.top, rect.right, rect.top + height * 0.48f);
+            LinearGradient topSheen = new LinearGradient(
+                    topSheenRect.left,
+                    topSheenRect.top,
+                    topSheenRect.left,
+                    topSheenRect.bottom,
+                    0x55FFFDF4,
+                    0x00FFFDF4,
+                    Shader.TileMode.CLAMP);
+            sheenPaint.setShader(topSheen);
+            canvas.drawRect(topSheenRect, sheenPaint);
+
+            // 2. Animated tilted glossy shimmer sweep (#00FFFFFF -> #99FFFDF0 -> #00FFFFFF)
+            float bandWidth = Math.max(height * 1.6f, width * 0.34f);
+            float travel = width + bandWidth * 2.2f;
+            float bandStartX = (rect.left - bandWidth * 1.1f) + travel * shimmerProgress;
+            float tiltOffset = height * 0.65f;
+            LinearGradient shimmerGradient = new LinearGradient(
+                    bandStartX,
+                    rect.top,
+                    bandStartX + bandWidth,
+                    rect.bottom + tiltOffset,
+                    GOLD_SHIMMER_STOPS,
+                    GOLD_SHIMMER_POSITIONS,
+                    Shader.TileMode.CLAMP);
+            shimmerPaint.setShader(shimmerGradient);
+            canvas.drawRect(rect, shimmerPaint);
+
+            canvas.restoreToCount(save);
+
+            // 3. Crisp champagne inner highlight & outer border
+            if (drawInnerHighlight) {
+                innerRect.set(
+                        bounds.left + innerInset,
+                        bounds.top + innerInset,
+                        bounds.right - innerInset,
+                        bounds.bottom - innerInset);
+                float innerRadius = Math.max(2f, cornerRadius - outerInset);
+                canvas.drawRoundRect(innerRect, innerRadius, innerRadius, innerBorderPaint);
+            }
+            canvas.drawRoundRect(rect, cornerRadius, cornerRadius, outerBorderPaint);
+        }
+
+        @Override
+        public void getOutline(Outline outline) {
+            Rect bounds = getBounds();
+            if (!bounds.isEmpty()) {
+                outline.setRoundRect(bounds, cornerRadius);
+                outline.setAlpha(1.0f);
+            }
+        }
+
+        @Override
+        public void setAlpha(int alpha) {
+            basePaint.setAlpha(alpha);
+            sheenPaint.setAlpha(alpha);
+            shimmerPaint.setAlpha(alpha);
+            innerBorderPaint.setAlpha(alpha);
+            outerBorderPaint.setAlpha(alpha);
+        }
+
+        @Override
+        public void setColorFilter(ColorFilter colorFilter) {
+            basePaint.setColorFilter(colorFilter);
+            sheenPaint.setColorFilter(colorFilter);
+            shimmerPaint.setColorFilter(colorFilter);
+            innerBorderPaint.setColorFilter(colorFilter);
+            outerBorderPaint.setColorFilter(colorFilter);
         }
 
         @Override

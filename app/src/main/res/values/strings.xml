@@ -36,4 +36,9 @@
     <string name="exit_confirm_cancel">Stay</string>
     <string name="exit_confirm_positive">Exit</string>
     <string name="recovery_notice">Previous save could not be restored. Started a clean round for today.</string>
+    <string name="top_bar_title">Wordward · #%1$d</string>
+    <string name="top_bar_totals">Guesses: %1$d · Hints: %2$d</string>
+    <string name="won_compact">🎉 Solved in %1$d attempts (%2$d guesses · %3$d hints)</string>
+    <string name="menu_how_to_play">How to play</string>
+    <string name="how_to_play_close">Got it</string>
 </resources>

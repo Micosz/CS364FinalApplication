@@ -136,7 +136,49 @@ public class GameScreenTest {
                 false);
         assertNotEquals(farGreenDay, closeGreenDay);
         assertNotEquals(closeGreenDay, goldDay);
-        assertEquals(0xFFF5C542, goldDay);
+        assertEquals(0xFFFFD700, goldDay);
+
+        // Metallic Gold #1 row styling: 5-stop gradient, shimmer stops, champagne borders, and high-contrast bronze text
+        assertArrayEquals(
+                new int[] { 0xFFFFF4B8, 0xFFFFD700, 0xFFF0B400, 0xFFC98A00, 0xFFFFE47A },
+                GameScreen.goldGradientStops());
+        assertArrayEquals(
+                new int[] { 0x00FFFFFF, 0x99FFFDF0, 0x00FFFFFF },
+                GameScreen.goldShimmerStops());
+        assertEquals(0xFFB87D00, GameScreen.goldOuterBorderColor(false));
+        assertEquals(0xFFFFF3A1, GameScreen.goldOuterBorderColor(true));
+        assertEquals(0xFFFFF3A1, GameScreen.goldInnerHighlightColor());
+        assertEquals(0xFF241500, GameScreen.goldTextColor());
+
+        // Rank #1 rows must omit the redundant SECRET #1 badge; only hints or duplicate targets show a pill badge
+        assertFalse(GameScreen.shouldShowEntryBadge(new GameRound.Entry("mirror", 1, false), false));
+        assertFalse(GameScreen.shouldShowEntryBadge(new GameRound.Entry("paper", 7, false), false));
+        assertTrue(GameScreen.shouldShowEntryBadge(new GameRound.Entry("water", 12, true), false));
+        assertTrue(GameScreen.shouldShowEntryBadge(new GameRound.Entry("paper", 7, false), true));
+        assertFalse(GameScreen.shouldShowEntryBadge(null, false));
+
+        // Contexto-style pinned latest guess outline border
+        assertEquals(0xFF1E293B, GameScreen.pinnedLatestBorderColor(false));
+        assertEquals(0xFFE2E8F0, GameScreen.pinnedLatestBorderColor(true));
+
+        // Double-submit & empty-input guard: trim input, ignore empty strings, and ignore key-up Enter events
+        assertEquals("hello", GameScreen.normalizeSubmittedGuess("  hello \n"));
+        assertEquals("", GameScreen.normalizeSubmittedGuess("   "));
+        assertEquals("", GameScreen.normalizeSubmittedGuess(""));
+        assertEquals("", GameScreen.normalizeSubmittedGuess(null));
+        assertTrue(GameScreen.shouldSubmitEditorAction(
+                android.view.inputmethod.EditorInfo.IME_ACTION_DONE, -1, 0));
+        assertTrue(GameScreen.shouldSubmitEditorAction(
+                android.view.inputmethod.EditorInfo.IME_ACTION_GO, -1, 0));
+        assertTrue(GameScreen.shouldSubmitEditorAction(
+                android.view.inputmethod.EditorInfo.IME_NULL,
+                android.view.KeyEvent.ACTION_DOWN,
+                android.view.KeyEvent.KEYCODE_ENTER));
+        assertFalse("Enter ACTION_UP must not trigger a second submit on the cleared EditText",
+                GameScreen.shouldSubmitEditorAction(
+                        android.view.inputmethod.EditorInfo.IME_ACTION_DONE,
+                        android.view.KeyEvent.ACTION_UP,
+                        android.view.KeyEvent.KEYCODE_ENTER));
     }
 
     @Test
@@ -202,14 +244,27 @@ public class GameScreenTest {
         assertTrue(dayColors.containsKey("tier_gold_fill"));
         assertTrue(dayColors.containsKey("tier_green_fill"));
 
-        // Bug #1 & #3 Repro: Check activity_game.xml header button alignment, ScrollView clipToPadding, and themes.xml
+        // Check Contexto flat layout in activity_game.xml, ScrollView clipToPadding, and themes.xml
         String layoutXml = new String(
                 Files.readAllBytes(new File(resDir, "layout/activity_game.xml").toPath()),
                 StandardCharsets.UTF_8);
-        assertTrue("Header button row must disable baselineAligned",
+        assertTrue("TopAppBar and input bar must disable baselineAligned",
                 layoutXml.contains("android:baselineAligned=\"false\""));
         assertTrue("ScrollView must disable clipToPadding to prevent bottom clipping",
                 layoutXml.contains("android:clipToPadding=\"false\""));
+        assertTrue("Flat Contexto layout must include top_app_bar, menu_button, and input_bar",
+                layoutXml.contains("@+id/top_app_bar")
+                        && layoutXml.contains("@+id/menu_button")
+                        && layoutXml.contains("@+id/input_bar"));
+        assertFalse("Flat Contexto layout must not wrap sections in nested card containers",
+                layoutXml.contains("@+id/header_card")
+                        || layoutXml.contains("@+id/input_card")
+                        || layoutXml.contains("@+id/latest_card")
+                        || layoutXml.contains("@+id/history_card"));
+        assertTrue(en.containsKey("top_bar_title") && th.containsKey("top_bar_title"));
+        assertTrue(en.containsKey("top_bar_totals") && th.containsKey("top_bar_totals"));
+        assertTrue(en.containsKey("won_compact") && th.containsKey("won_compact"));
+        assertTrue(en.containsKey("menu_how_to_play") && th.containsKey("menu_how_to_play"));
 
         File dayThemeFile = new File(resDir, "values/themes.xml");
         File nightThemeFile = new File(resDir, "values-night/themes.xml");

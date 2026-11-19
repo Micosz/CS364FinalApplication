@@ -36,4 +36,9 @@
     <string name="exit_confirm_cancel">เล่นต่อ</string>
     <string name="exit_confirm_positive">ออกจากแอป</string>
     <string name="recovery_notice">ไม่สามารถกู้ข้อมูลรอบเดิมได้ จึงเริ่มรอบว่างสำหรับวันนี้</string>
+    <string name="top_bar_title">Wordward · #%1$d</string>
+    <string name="top_bar_totals">ทาย: %1$d · ใบ้: %2$d</string>
+    <string name="won_compact">🎉 ชนะใน %1$d ครั้ง (เดา %2$d · ใบ้ %3$d)</string>
+    <string name="menu_how_to_play">วิธีเล่น</string>
+    <string name="how_to_play_close">เข้าใจแล้ว</string>
 </resources>
