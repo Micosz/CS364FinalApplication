@@ -27,7 +27,7 @@ public class ProductionWordsTest {
         Set<String> expected = new HashSet<>();
         for (String secret : secrets) {
             WordRanker.Ranking ranks = words.rankFor(secret);
-            assertEquals(43579, ranks.size());
+            assertEquals(30000, ranks.size());
             assertEquals(secret, ranks.wordAt(1));
             Set<String> found = new HashSet<>();
             for (int rank = 1; rank <= ranks.size(); rank++) {

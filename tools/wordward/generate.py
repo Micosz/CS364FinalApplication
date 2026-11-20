@@ -13,7 +13,7 @@ from wordfreq import top_n_list
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
-COUNT = 43579
+COUNT = 30000
 DAYS = 31
 TOKEN = re.compile(r"[a-z]+")
 VECTOR_MEMBER = "glove.6B.100d.txt"
