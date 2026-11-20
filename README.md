@@ -1,10 +1,10 @@
-# Wordward · ทดลอง 43,579 คำ
+# Wordward · ฐานทีม CS364
 
 แอป Android Java สำหรับเกมเดาคำอังกฤษจากอันดับความหมาย ทุกคนได้โจทย์เดียวกันตามวันที่ไทย ชุดข้อมูลของงาน 02 มี **31 โจทย์ 43,579 คำหลัก และ 9,852 รูปคำเพิ่มเติม** ใช้ตารางอันดับ TSV เดียวกันทั้งการเดาและคำใบ้ ดู [ที่มาและวิธีสร้างข้อมูลซ้ำ](doc/WORDWARD_02_DATA.md) แอปบันทึกรอบและภาษาไว้ในเครื่อง
 
 ## เปิดและรัน
 
-1. ใน Android Studio เลือก **File → Open** แล้วเลือกโฟลเดอร์ **Wordward-43579** ที่มี `settings.gradle` และ `gradlew`
+1. แตก ZIP ทั้งชุด ถ้าใช้ Android Studio ให้เลือก **File → Open** แล้วเลือกโฟลเดอร์ **CS364FinalApplication** ที่มี `settings.gradle` และ `gradlew`
 2. ใช้ Android Studio ที่รองรับ **Android Gradle Plugin 9.3.3** ตั้ง Gradle JDK เป็น JBR ที่มากับ Studio และติดตั้ง **Android SDK Platform 37** จาก SDK Manager โปรเจกต์ใช้ Gradle Wrapper 9.5.0 และดาวน์โหลดไลบรารีจาก Google Maven / Maven Central ในการ Sync ครั้งแรก
 3. กด **Sync Project with Gradle Files** เลือกโมดูล **app** และ Emulator หรือมือถือ Android API 24 ขึ้นไป แล้วกด **Run ▶** หลังติดตั้งเล่นออฟไลน์ได้
 4. ลองเดา `blue` ขอคำใบ้ ปิดแล้วเปิดใหม่ และสลับภาษา ในโจทย์ตัวอย่าง `ocean` คำว่า `blue` อยู่ #627 ส่วนวันเริ่มจริงและพฤติกรรมก่อนเริ่ม/หลังวันที่ 31 รอทีมยืนยันตาม [ข้อตกลงทีม](docs/team/TEAM_AGREEMENTS.md)
