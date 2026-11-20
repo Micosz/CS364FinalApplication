@@ -18,7 +18,7 @@ public class ProductionWordsTest {
     private static final Path ASSETS = Paths.get("src/main/assets");
 
     @Test
-    public void ranksTheSame5000CanonicalWordsInAll31Puzzles() throws IOException {
+    public void ranksTheSameCanonicalWordsInAll31Puzzles() throws IOException {
         WordRanker words = openProduction();
         List<String> secrets = words.daily();
         assertEquals(31, secrets.size());
@@ -27,7 +27,7 @@ public class ProductionWordsTest {
         Set<String> expected = new HashSet<>();
         for (String secret : secrets) {
             WordRanker.Ranking ranks = words.rankFor(secret);
-            assertEquals(5000, ranks.size());
+            assertEquals(43579, ranks.size());
             assertEquals(secret, ranks.wordAt(1));
             Set<String> found = new HashSet<>();
             for (int rank = 1; rank <= ranks.size(); rank++) {

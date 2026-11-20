@@ -209,7 +209,7 @@ public class HintEngineTest {
         assertEquals(31, words.daily().size());
         for (String secret : words.daily()) {
             WordRanker.Ranking ranks = words.rankFor(secret);
-            assertEquals(5000, ranks.size());
+            assertEquals(43579, ranks.size());
             GameRound round = new GameRound(DAY);
             round.guess(ranks.wordAt(ranks.size()), ranks);
             HintEngine engine = new HintEngine(new Random(364));

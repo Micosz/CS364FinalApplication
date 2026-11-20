@@ -13,7 +13,7 @@ from wordfreq import top_n_list
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
-COUNT = 5000
+COUNT = 43579
 DAYS = 31
 TOKEN = re.compile(r"[a-z]+")
 VECTOR_MEMBER = "glove.6B.100d.txt"
@@ -208,8 +208,9 @@ def export(args):
     reviewed = read_reviewed_aliases()
     eligible = lexicon - exclude - inflections - reviewed.keys()
     required = set(secrets) | set(extras) | set(reviewed.values())
-    frequencies = top_n_list("en", 100_000, wordlist="large")
-    pool = unique_words(secrets + extras + sorted(reviewed.values()) + frequencies[:40_000])
+    candidate_frequencies = top_n_list("en", 1_000_000, wordlist="large")
+    frequencies = candidate_frequencies[:100_000]  # Keep the original alias frequency limit.
+    pool = unique_words(secrets + extras + sorted(reviewed.values()) + candidate_frequencies)
     candidates = eligible_words(pool, eligible)
     chosen_vectors, unusable = vectors(args.glove, set(candidates))
     chosen = []
@@ -245,7 +246,7 @@ def export(args):
     for name in outputs:
         output_hashes[name] = digest(args.out / name)
     print(json.dumps({
-        "dataset_version": "wordward-en-5000-31-v1",
+        "dataset_version": f"wordward-en-{COUNT}-31-v1",
         "canonical": len(vocab), "secrets": len(secrets), "aliases": len(forms),
         "candidates": len(candidates), "outside_vectors": len(set(candidates) - set(chosen_vectors)),
         "unusable_vectors": len(unusable), "glove_sha256": glove_hash, "wordnet_sha256": wn_hash,
