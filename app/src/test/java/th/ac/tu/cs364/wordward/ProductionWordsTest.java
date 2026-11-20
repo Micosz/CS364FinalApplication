@@ -87,8 +87,38 @@ public class ProductionWordsTest {
         assertThrows(IOException.class, () -> load("sea sea water\n", ""));
         assertThrows(IOException.class, () -> load("sea\tsea sea\n", ""));
         assertThrows(IOException.class, () -> load("sea\twater sea\n", ""));
-        assertThrows(IOException.class, () -> load("sea\tsea water\nwater\twater\n", ""));
         assertThrows(IOException.class, () -> load("sea\tsea water\nsea\tsea water\n", ""));
+    }
+
+    @Test
+    public void validatesDeferredRowsBeforeReturningThem() throws IOException {
+        String first = "sea\tsea water boat\n";
+        for (String row : new String[]{"water", "water boat boat", "water sea Wave",
+                "water sea boats", "water sea rock"}) {
+            WordRanker words = load(first + "water\t" + row + "\n", "boats\tboat\n");
+            WordRanker.Ranking sea = words.rankFor("sea");
+            IllegalStateException error = assertThrows(IllegalStateException.class,
+                    () -> words.rankFor("water"));
+            assertTrue(error.getMessage().contains("water"));
+            assertSame(sea, words.rankFor("sea"));
+            assertThrows(IllegalStateException.class, () -> words.rankFor("water"));
+        }
+    }
+
+    @Test
+    public void switchesPuzzlesWithoutChangingRanksOrCanonicalForms() throws IOException {
+        WordRanker words = load("sea\tsea water boat\nwater\twater boat sea\n", "boats\tboat\n");
+        assertEquals("boat", words.canonical(" BOATS "));
+        assertNull(words.rankFor("unknown"));
+        WordRanker.Ranking sea = words.rankFor("sea");
+        assertSame(sea, words.rankFor("sea"));
+        assertEquals(2, words.rankFor("water").rank("boat"));
+        assertEquals(3, sea.rank("boat"));
+        assertSame(sea, words.rankFor("sea"));
+        assertEquals("boat", words.rankFor("sea").wordAt(3));
+        assertNull(words.canonical("unknown"));
+        assertThrows(NullPointerException.class, () -> sea.rank("unknown"));
+        assertThrows(IndexOutOfBoundsException.class, () -> sea.wordAt(0));
     }
 
     @Test
