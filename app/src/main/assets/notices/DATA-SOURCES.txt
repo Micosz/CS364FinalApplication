@@ -1,4 +1,4 @@
-Wordward data release: wordward-en-5000-31-v1
+Wordward data release: wordward-en-30000-31-v1
 This notice applies to the bundled ranking and alias data.
 
 Candidate vocabulary was selected, filtered and reordered using English
